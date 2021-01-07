@@ -63,6 +63,7 @@ static int enable_auto_gc = 1;
 static int tags = TAGS_DEFAULT, unshallow, update_shallow, deepen;
 static int max_jobs = -1, submodule_fetch_jobs_config = -1;
 static int fetch_parallel_config = 1;
+static int atomic_fetch;
 static enum transport_family family;
 static const char *depth;
 static const char *deepen_since;
@@ -144,6 +145,8 @@ static struct option builtin_fetch_options[] = {
 		 N_("set upstream for git pull/fetch")),
 	OPT_BOOL('a', "append", &append,
 		 N_("append to .git/FETCH_HEAD instead of overwriting")),
+	OPT_BOOL(0, "atomic", &atomic_fetch,
+		 N_("use atomic transaction to update references")),
 	OPT_STRING(0, "upload-pack", &upload_pack, N_("path"),
 		   N_("path to upload pack on remote end")),
 	OPT__FORCE(&force, N_("force overwrite of local reference"), 0),
@@ -926,7 +929,8 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 	FILE *fp;
 	struct commit *commit;
 	int url_len, i, rc = 0;
-	struct strbuf note = STRBUF_INIT;
+	struct strbuf note = STRBUF_INIT, err = STRBUF_INIT;
+	struct ref_transaction *transaction = NULL;
 	const char *what, *kind;
 	struct ref *rm;
 	char *url;
@@ -951,6 +955,14 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 		rm = ref_map;
 		if (check_connected(iterate_ref_map, &rm, &opt)) {
 			rc = error(_("%s did not send all necessary objects\n"), url);
+			goto abort;
+		}
+	}
+
+	if (atomic_fetch) {
+		transaction = ref_transaction_begin(&err);
+		if (!transaction) {
+			error("%s", err.buf);
 			goto abort;
 		}
 	}
@@ -1048,7 +1060,7 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 
 			strbuf_reset(&note);
 			if (ref) {
-				rc |= update_local_ref(ref, NULL, what,
+				rc |= update_local_ref(ref, transaction, what,
 						       rm, &note, summary_width);
 				free(ref);
 			} else if (write_fetch_head || dry_run) {
@@ -1074,6 +1086,14 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 		}
 	}
 
+	if (!rc && transaction) {
+		rc = ref_transaction_commit(transaction, &err);
+		if (rc) {
+			error("%s", err.buf);
+			goto abort;
+		}
+	}
+
 	if (rc & STORE_REF_ERROR_DF_CONFLICT)
 		error(_("some local refs could not be updated; try running\n"
 		      " 'git remote prune %s' to remove any old, conflicting "
@@ -1090,6 +1110,8 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 
  abort:
 	strbuf_release(&note);
+	strbuf_release(&err);
+	ref_transaction_free(transaction);
 	free(url);
 	fclose(fp);
 	return rc;
