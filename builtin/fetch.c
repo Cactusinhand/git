@@ -63,6 +63,7 @@ static int enable_auto_gc = 1;
 static int tags = TAGS_DEFAULT, unshallow, update_shallow, deepen;
 static int max_jobs = -1, submodule_fetch_jobs_config = -1;
 static int fetch_parallel_config = 1;
+static int atomic_fetch;
 static enum transport_family family;
 static const char *depth;
 static const char *deepen_since;
@@ -144,6 +145,8 @@ static struct option builtin_fetch_options[] = {
 		 N_("set upstream for git pull/fetch")),
 	OPT_BOOL('a', "append", &append,
 		 N_("append to .git/FETCH_HEAD instead of overwriting")),
+	OPT_BOOL(0, "atomic", &atomic_fetch,
+		 N_("use atomic transaction to update references")),
 	OPT_STRING(0, "upload-pack", &upload_pack, N_("path"),
 		   N_("path to upload pack on remote end")),
 	OPT__FORCE(&force, N_("force overwrite of local reference"), 0),
@@ -583,13 +586,14 @@ static struct ref *get_ref_map(struct remote *remote,
 
 static int s_update_ref(const char *action,
 			struct ref *ref,
+			struct ref_transaction *transaction,
 			int check_old)
 {
 	char *msg;
 	char *rla = getenv("GIT_REFLOG_ACTION");
-	struct ref_transaction *transaction;
+	struct ref_transaction *transaction_to_free = NULL;
 	struct strbuf err = STRBUF_INIT;
-	int ret, df_conflict = 0;
+	int ret, df_conflict = 0, commit = 0;
 
 	if (dry_run)
 		return 0;
@@ -597,26 +601,38 @@ static int s_update_ref(const char *action,
 		rla = default_rla.buf;
 	msg = xstrfmt("%s: %s", rla, action);
 
-	transaction = ref_transaction_begin(&err);
-	if (!transaction ||
-	    ref_transaction_update(transaction, ref->name,
+	/*
+	 * If no transaction was passed to us, we manage the transaction
+	 * ourselves. Otherwise, we trust the caller to handle the transaction
+	 * lifecycle.
+	 */
+	if (!transaction) {
+		transaction = transaction_to_free = ref_transaction_begin(&err);
+		if (!transaction)
+			goto fail;
+		commit = 1;
+	}
+
+	if (ref_transaction_update(transaction, ref->name,
 				   &ref->new_oid,
 				   check_old ? &ref->old_oid : NULL,
 				   0, msg, &err))
 		goto fail;
 
-	ret = ref_transaction_commit(transaction, &err);
-	if (ret) {
-		df_conflict = (ret == TRANSACTION_NAME_CONFLICT);
-		goto fail;
+	if (commit) {
+		ret = ref_transaction_commit(transaction, &err);
+		if (ret) {
+			df_conflict = (ret == TRANSACTION_NAME_CONFLICT);
+			goto fail;
+		}
 	}
 
-	ref_transaction_free(transaction);
+	ref_transaction_free(transaction_to_free);
 	strbuf_release(&err);
 	free(msg);
 	return 0;
 fail:
-	ref_transaction_free(transaction);
+	ref_transaction_free(transaction_to_free);
 	error("%s", err.buf);
 	strbuf_release(&err);
 	free(msg);
@@ -759,6 +775,7 @@ static void format_display(struct strbuf *display, char code,
 }
 
 static int update_local_ref(struct ref *ref,
+			    struct ref_transaction *transaction,
 			    const char *remote,
 			    const struct ref *remote_ref,
 			    struct strbuf *display,
@@ -799,7 +816,7 @@ static int update_local_ref(struct ref *ref,
 	    starts_with(ref->name, "refs/tags/")) {
 		if (force || ref->force) {
 			int r;
-			r = s_update_ref("updating tag", ref, 0);
+			r = s_update_ref("updating tag", ref, transaction, 0);
 			format_display(display, r ? '!' : 't', _("[tag update]"),
 				       r ? _("unable to update local ref") : NULL,
 				       remote, pretty_ref, summary_width);
@@ -836,7 +853,7 @@ static int update_local_ref(struct ref *ref,
 			what = _("[new ref]");
 		}
 
-		r = s_update_ref(msg, ref, 0);
+		r = s_update_ref(msg, ref, transaction, 0);
 		format_display(display, r ? '!' : '*', what,
 			       r ? _("unable to update local ref") : NULL,
 			       remote, pretty_ref, summary_width);
@@ -858,7 +875,7 @@ static int update_local_ref(struct ref *ref,
 		strbuf_add_unique_abbrev(&quickref, &current->object.oid, DEFAULT_ABBREV);
 		strbuf_addstr(&quickref, "..");
 		strbuf_add_unique_abbrev(&quickref, &ref->new_oid, DEFAULT_ABBREV);
-		r = s_update_ref("fast-forward", ref, 1);
+		r = s_update_ref("fast-forward", ref, transaction, 1);
 		format_display(display, r ? '!' : ' ', quickref.buf,
 			       r ? _("unable to update local ref") : NULL,
 			       remote, pretty_ref, summary_width);
@@ -870,7 +887,7 @@ static int update_local_ref(struct ref *ref,
 		strbuf_add_unique_abbrev(&quickref, &current->object.oid, DEFAULT_ABBREV);
 		strbuf_addstr(&quickref, "...");
 		strbuf_add_unique_abbrev(&quickref, &ref->new_oid, DEFAULT_ABBREV);
-		r = s_update_ref("forced-update", ref, 1);
+		r = s_update_ref("forced-update", ref, transaction, 1);
 		format_display(display, r ? '!' : '+', quickref.buf,
 			       r ? _("unable to update local ref") : _("forced update"),
 			       remote, pretty_ref, summary_width);
@@ -912,7 +929,8 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 	FILE *fp;
 	struct commit *commit;
 	int url_len, i, rc = 0;
-	struct strbuf note = STRBUF_INIT;
+	struct strbuf note = STRBUF_INIT, err = STRBUF_INIT;
+	struct ref_transaction *transaction = NULL;
 	const char *what, *kind;
 	struct ref *rm;
 	char *url;
@@ -937,6 +955,14 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 		rm = ref_map;
 		if (check_connected(iterate_ref_map, &rm, &opt)) {
 			rc = error(_("%s did not send all necessary objects\n"), url);
+			goto abort;
+		}
+	}
+
+	if (atomic_fetch) {
+		transaction = ref_transaction_begin(&err);
+		if (!transaction) {
+			error("%s", err.buf);
 			goto abort;
 		}
 	}
@@ -1034,8 +1060,8 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 
 			strbuf_reset(&note);
 			if (ref) {
-				rc |= update_local_ref(ref, what, rm, &note,
-						       summary_width);
+				rc |= update_local_ref(ref, transaction, what,
+						       rm, &note, summary_width);
 				free(ref);
 			} else if (write_fetch_head || dry_run) {
 				/*
@@ -1060,6 +1086,14 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 		}
 	}
 
+	if (!rc && transaction) {
+		rc = ref_transaction_commit(transaction, &err);
+		if (rc) {
+			error("%s", err.buf);
+			goto abort;
+		}
+	}
+
 	if (rc & STORE_REF_ERROR_DF_CONFLICT)
 		error(_("some local refs could not be updated; try running\n"
 		      " 'git remote prune %s' to remove any old, conflicting "
@@ -1076,6 +1110,8 @@ static int store_updated_refs(const char *raw_url, const char *remote_name,
 
  abort:
 	strbuf_release(&note);
+	strbuf_release(&err);
+	ref_transaction_free(transaction);
 	free(url);
 	fclose(fp);
 	return rc;
