@@ -248,6 +248,7 @@ static int process_dummy_ref(const struct packet_reader *reader)
 	struct object_id oid;
 	const char *name;
 
+	warning("call [process_dummy_ref]");
 	if (parse_oid_hex_algop(line, &oid, &name, reader->hash_algo))
 		return 0;
 	if (*name != ' ')
@@ -304,8 +305,10 @@ static int process_shallow(const struct packet_reader *reader, int len,
 
 	if (get_oid_hex_algop(arg, &old_oid, reader->hash_algo))
 		die(_("protocol error: expected shallow sha-1, got '%s'"), arg);
+	warning("shallow_points->nr: %ld........", shallow_points->nr);
 	if (!shallow_points)
 		die(_("repository on the other end cannot be shallow"));
+	warning("shallow_points are not NULL, so not die at this point.");
 	oid_array_append(shallow_points, &old_oid);
 	check_no_capabilities(line, len);
 	return 1;
@@ -330,6 +333,7 @@ struct ref **get_remote_heads(struct packet_reader *reader,
 	int len = 0;
 	enum get_remote_heads_state state = EXPECTING_FIRST_REF;
 
+	warning("call [get_remote_heads]");
 	*list = NULL;
 
 	while (state != EXPECTING_DONE) {
@@ -349,19 +353,24 @@ struct ref **get_remote_heads(struct packet_reader *reader,
 
 		switch (state) {
 		case EXPECTING_FIRST_REF:
+			warning("[process_capabilities]");
 			process_capabilities(reader, &len);
 			if (process_dummy_ref(reader)) {
+				warning("expecting shallow.....");
 				state = EXPECTING_SHALLOW;
 				break;
 			}
+			warning("else expecting ref.....");
 			state = EXPECTING_REF;
 			/* fallthrough */
 		case EXPECTING_REF:
+			warning("[process_ref]");
 			if (process_ref(reader, len, &list, flags, extra_have))
 				break;
 			state = EXPECTING_SHALLOW;
 			/* fallthrough */
 		case EXPECTING_SHALLOW:
+			warning("[process_shallow]");
 			if (process_shallow(reader, len, shallow_points))
 				break;
 			die(_("protocol error: unexpected '%s'"), reader->line);
@@ -485,6 +494,7 @@ struct ref **get_remote_refs(int fd_out, struct packet_reader *reader,
 		&transport_options->unborn_head_target : NULL;
 	*list = NULL;
 
+	warning("call [get_remote_refs]");
 	if (server_supports_v2("ls-refs", 1))
 		packet_write_fmt(fd_out, "command=ls-refs\n");
 
@@ -519,12 +529,15 @@ struct ref **get_remote_refs(int fd_out, struct packet_reader *reader,
 				 ref_prefixes->v[i]);
 	}
 	packet_flush(fd_out);
+	warning("[packet_flush] done.");
 
 	/* Process response from server */
+	warning("[packet_reader].");
 	while (packet_reader_read(reader) == PACKET_READ_NORMAL) {
 		if (!process_ref_v2(reader, &list, unborn_head_target))
 			die(_("invalid ls-refs response: %s"), reader->line);
 	}
+	warning("[packet_reader] done.");
 
 	if (reader->status != PACKET_READ_FLUSH)
 		die(_("expected flush after ref listing"));
@@ -1354,6 +1367,7 @@ struct child_process *git_connect(int fd[2], const char *url,
 	enum protocol protocol;
 	enum protocol_version version = get_protocol_version_config();
 
+	warning("call [git_connect]");
 	/*
 	 * NEEDSWORK: If we are trying to use protocol v2 and we are planning
 	 * to perform a push, then fallback to v0 since the client doesn't know

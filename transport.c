@@ -236,15 +236,18 @@ static int set_git_option(struct git_transport_options *opts,
 		list_objects_filter_die_if_populated(&opts->filter_options);
 		parse_list_objects_filter(&opts->filter_options, value);
 		return 0;
+	} else if (!strcmp(name, TRANS_OPT_REJECT_SHALLOW)) {
+		opts->reject_shallow = !!value;
+		return 0;
 	}
 	return 1;
 }
 
 static int connect_setup(struct transport *transport, int for_push)
 {
+	warning("call [connect_setup]");
 	struct git_transport_data *data = transport->data;
 	int flags = transport->verbose > 0 ? CONNECT_VERBOSE : 0;
-
 	if (data->conn)
 		return 0;
 
@@ -283,6 +286,7 @@ static struct ref *handshake(struct transport *transport, int for_push,
 			     struct transport_ls_refs_options *options,
 			     int must_list_refs)
 {
+	warning("call [handshake]...........");
 	struct git_transport_data *data = transport->data;
 	struct ref *refs = NULL;
 	struct packet_reader reader;
@@ -291,14 +295,18 @@ static struct ref *handshake(struct transport *transport, int for_push,
 
 	connect_setup(transport, for_push);
 
+	warning("  [packet_reader_init]");
 	packet_reader_init(&reader, data->fd[0], NULL, 0,
 			   PACKET_READ_CHOMP_NEWLINE |
 			   PACKET_READ_GENTLE_ON_EOF |
 			   PACKET_READ_DIE_ON_ERR_PACKET);
 
+	warning("  [discover_version]");
 	data->version = discover_version(&reader);
 	switch (data->version) {
 	case protocol_v2:
+
+		warning("[handshake] protocol_v2");
 		if (server_feature_v2("session-id", &server_sid))
 			trace2_data_string("transfer", NULL, "server-sid", server_sid);
 		if (must_list_refs)
@@ -309,6 +317,7 @@ static struct ref *handshake(struct transport *transport, int for_push,
 		break;
 	case protocol_v1:
 	case protocol_v0:
+		warning("[handshake] protocol_v1");
 		die_if_server_options(transport);
 		get_remote_heads(&reader, &refs,
 				 for_push ? REF_NORMAL : 0,
@@ -330,12 +339,14 @@ static struct ref *handshake(struct transport *transport, int for_push,
 	if (reader.line_peeked)
 		BUG("buffer must be empty at the end of handshake()");
 
+	warning("handshake done.");
 	return refs;
 }
 
 static struct ref *get_refs_via_connect(struct transport *transport, int for_push,
 					struct transport_ls_refs_options *options)
 {
+	warning("[xxx_vtable->get_refs_via_connect]");
 	return handshake(transport, for_push, options, 1);
 }
 
@@ -348,6 +359,7 @@ static int fetch_refs_via_pack(struct transport *transport,
 	struct fetch_pack_args args;
 	struct ref *refs_tmp = NULL;
 
+	warning("[xxx_vtable->fetch_refs_via_pack]");
 	memset(&args, 0, sizeof(args));
 	args.uploadpack = data->options.uploadpack;
 	args.keep_pack = data->options.keep;
@@ -370,6 +382,9 @@ static int fetch_refs_via_pack(struct transport *transport,
 	args.stateless_rpc = transport->stateless_rpc;
 	args.server_options = transport->server_options;
 	args.negotiation_tips = data->options.negotiation_tips;
+	args.remote_shallow = transport->smart_options->reject_shallow;
+	// which way?
+	args.remote_shallow = data->options.reject_shallow;
 
 	if (!data->got_remote_heads) {
 		int i;
@@ -387,7 +402,7 @@ static int fetch_refs_via_pack(struct transport *transport,
 		BUG("unknown protocol version");
 	else if (data->version <= protocol_v1)
 		die_if_server_options(transport);
-
+	warning("fetch_refs_via_pack, ready to call fetch_pack");
 	refs = fetch_pack(&args, data->fd,
 			  refs_tmp ? refs_tmp : transport->remote_refs,
 			  to_fetch, nr_heads, &data->shallow,
@@ -879,6 +894,7 @@ void transport_take_over(struct transport *transport,
 	data->got_remote_heads = 0;
 	transport->data = data;
 
+	warning("transport->vtable = taken_over_vtable");
 	transport->vtable = &taken_over_vtable;
 	transport->smart_options = &(data->options);
 
@@ -1024,6 +1040,7 @@ struct transport *transport_get(struct remote *remote, const char *url)
 {
 	const char *helper;
 	struct transport *ret = xcalloc(1, sizeof(*ret));
+	warning("call [builtin/clone.c]->[transport_get].......");
 
 	ret->progress = isatty(2);
 	string_list_init(&ret->pack_lockfiles, 1);
@@ -1041,6 +1058,7 @@ struct transport *transport_get(struct remote *remote, const char *url)
 
 	/* maybe it is a foreign URL? */
 	if (url) {
+		// git clone hg::https://soc.googlecode.com/hg/
 		const char *p = url;
 
 		while (is_urlschemechar(p == url, *p))
@@ -1050,10 +1068,13 @@ struct transport *transport_get(struct remote *remote, const char *url)
 	}
 
 	if (helper) {
+		warning("[trans_get] call helper");
 		transport_helper_init(ret, helper);
 	} else if (starts_with(url, "rsync:")) {
+		// git clone rsync://ubuntu.org.cn/ubuntu-cn
 		die(_("git-over-rsync is no longer supported"));
 	} else if (url_is_local_not_ssh(url) && is_file(url) && is_bundle(url, 1)) {
+		warning("[trans_get] URL is local, not ssh, is file, is bundle.");
 		struct bundle_transport_data *data = xcalloc(1, sizeof(*data));
 		transport_check_allowed("file");
 		ret->data = data;
@@ -1070,6 +1091,7 @@ struct transport *transport_get(struct remote *remote, const char *url)
 		 * These are builtin smart transports; "allowed" transports
 		 * will be checked individually in git_connect.
 		 */
+		warning("[trans_get] URL is file:// | git:// | ssh:// | git+ssh:// | ssh+git://");
 		struct git_transport_data *data = xcalloc(1, sizeof(*data));
 		ret->data = data;
 		ret->vtable = &builtin_smart_vtable;
@@ -1078,9 +1100,11 @@ struct transport *transport_get(struct remote *remote, const char *url)
 		data->conn = NULL;
 		data->got_remote_heads = 0;
 	} else {
-		/* Unknown protocol in URL. Pass to external handler. */
+		/* Unknown protocol in URL(but include https://, http://). Pass to external handler. */
+		warning("[trans_get] URL unknow protocol(include https), pass to external handler.");
 		int len = external_specification_len(url);
 		char *handler = xmemdupz(url, len);
+		// set transport->smart_options too
 		transport_helper_init(ret, handler);
 	}
 
@@ -1096,6 +1120,7 @@ struct transport *transport_get(struct remote *remote, const char *url)
 
 	ret->hash_algo = &hash_algos[GIT_HASH_SHA1];
 
+	warning("call [builtin/clone.c]->[transport_get] done.......");
 	return ret;
 }
 
@@ -1109,17 +1134,21 @@ int transport_set_option(struct transport *transport,
 {
 	int git_reports = 1, protocol_reports = 1;
 
+	warning("call [transport_set_options]..........");
 	if (transport->smart_options)
 		git_reports = set_git_option(transport->smart_options,
 					     name, value);
+
 
 	if (transport->vtable->set_option)
 		protocol_reports = transport->vtable->set_option(transport,
 								 name, value);
 
+
 	/* If either report is 0, report 0 (success). */
 	if (!git_reports || !protocol_reports)
 		return 0;
+
 	/* If either reports -1 (invalid value), report -1. */
 	if ((git_reports == -1) || (protocol_reports == -1))
 		return -1;
@@ -1383,6 +1412,7 @@ int transport_push(struct repository *r,
 const struct ref *transport_get_remote_refs(struct transport *transport,
 					    struct transport_ls_refs_options *transport_options)
 {
+	warning("[transport_get_remote_refs]");
 	if (!transport->got_remote_refs) {
 		transport->remote_refs =
 			transport->vtable->get_refs_list(transport, 0,
@@ -1399,6 +1429,7 @@ int transport_fetch_refs(struct transport *transport, struct ref *refs)
 	int nr_heads = 0, nr_alloc = 0, nr_refs = 0;
 	struct ref **heads = NULL;
 	struct ref *rm;
+	warning("call [transport_fetch_refs]");
 
 	for (rm = refs; rm; rm = rm->next) {
 		nr_refs++;
@@ -1441,6 +1472,7 @@ void transport_unlock_pack(struct transport *transport)
 int transport_connect(struct transport *transport, const char *name,
 		      const char *exec, int fd[2])
 {
+	warning("call [transport_connect!!!!!!!!]");
 	if (transport->vtable->connect)
 		return transport->vtable->connect(transport, name, exec, fd);
 	else

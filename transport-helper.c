@@ -103,6 +103,7 @@ static const char *remove_ext_force(const char *url)
 
 static void do_take_over(struct transport *transport)
 {
+	warning("[transport_take_over]");
 	struct helper_data *data;
 	data = (struct helper_data *)transport->data;
 	transport_take_over(transport, data->helper);
@@ -120,6 +121,7 @@ static struct child_process *get_helper(struct transport *transport)
 	int duped;
 	int code;
 
+	warning("[get_helper]");
 	if (data->helper)
 		return data->helper;
 
@@ -162,7 +164,7 @@ static struct child_process *get_helper(struct transport *transport)
 	data->out = xfdopen(duped, "r");
 
 	write_constant(helper->in, "capabilities\n");
-
+	// data->transport_options.reject_shallow = transport->smart_options->reject_shallow; 
 	while (1) {
 		const char *capname, *arg;
 		int mandatory = 0;
@@ -180,14 +182,18 @@ static struct child_process *get_helper(struct transport *transport)
 
 		if (debug)
 			fprintf(stderr, "Debug: Got cap %s\n", capname);
-		if (!strcmp(capname, "fetch"))
+		if (!strcmp(capname, "fetch")) {
+			warning("[get_helper] cap name is fetch.");
 			data->fetch = 1;
+		}
 		else if (!strcmp(capname, "option"))
 			data->option = 1;
 		else if (!strcmp(capname, "push"))
 			data->push = 1;
-		else if (!strcmp(capname, "import"))
+		else if (!strcmp(capname, "import")) {
+			warning("[get_helper] cap name is import.");
 			data->import = 1;
+		}
 		else if (!strcmp(capname, "bidi-import"))
 			data->bidi_import = 1;
 		else if (!strcmp(capname, "export"))
@@ -222,6 +228,7 @@ static struct child_process *get_helper(struct transport *transport)
 	strbuf_release(&buf);
 	if (debug)
 		fprintf(stderr, "Debug: Capabilities complete.\n");
+	warning("read Capabilities done.");
 	standard_options(transport);
 	return data->helper;
 }
@@ -265,7 +272,8 @@ static const char *boolean_options[] = {
 	TRANS_OPT_THIN,
 	TRANS_OPT_KEEP,
 	TRANS_OPT_FOLLOWTAGS,
-	TRANS_OPT_DEEPEN_RELATIVE
+	TRANS_OPT_DEEPEN_RELATIVE,
+	TRANS_OPT_REJECT_SHALLOW
 	};
 
 static int strbuf_set_helper_option(struct helper_data *data,
@@ -317,6 +325,7 @@ static int set_helper_option(struct transport *transport,
 	struct strbuf buf = STRBUF_INIT;
 	int i, ret, is_bool = 0;
 
+	warning("[vtale->set_helper_option]");
 	get_helper(transport);
 
 	if (!data->option)
@@ -405,13 +414,11 @@ static int fetch_with_fetch(struct transport *transport,
 
 	strbuf_addch(&buf, '\n');
 	sendline(data, &buf);
-
 	while (1) {
 		const char *name;
 
 		if (recvline(data, &buf))
 			exit(128);
-
 		if (skip_prefix(buf.buf, "lock ", &name)) {
 			if (transport->pack_lockfiles.nr)
 				warning(_("%s also locked %s"), data->name, name);
@@ -429,6 +436,8 @@ static int fetch_with_fetch(struct transport *transport,
 			warning(_("%s unexpectedly said: '%s'"), data->name, buf.buf);
 	}
 	strbuf_release(&buf);
+	warning("fetch_with_fetch done.");
+	warning("reject ? %d.", data->transport_options.reject_shallow);
 	return 0;
 }
 
@@ -561,7 +570,7 @@ static int run_connect(struct transport *transport, struct strbuf *cmdbuf)
 	int duped;
 	FILE *input;
 	struct child_process *helper;
-
+	warning("[run_connect]");
 	helper = get_helper(transport);
 
 	/*
@@ -576,10 +585,12 @@ static int run_connect(struct transport *transport, struct strbuf *cmdbuf)
 	input = xfdopen(duped, "r");
 	setvbuf(input, NULL, _IONBF, 0);
 
+	warning("[process_connect]-> before sendline cmdbuf.buf %s", cmdbuf->buf);
 	sendline(data, cmdbuf);
+	warning("[process_connect]-> cmdbuf.buf %s", cmdbuf->buf);
 	if (recvline_fh(input, cmdbuf))
 		exit(128);
-
+	warning("[process_connect]-> after recvline cmdbuf.buf %s", cmdbuf->buf);
 	if (!strcmp(cmdbuf->buf, "")) {
 		data->no_disconnect_req = 1;
 		if (debug)
@@ -595,6 +606,8 @@ static int run_connect(struct transport *transport, struct strbuf *cmdbuf)
 		    cmdbuf->buf);
 	}
 
+	warning("what has received: %s", cmdbuf->buf);
+	warning("[run_connect done] ret: %d", ret);
 	fclose(input);
 	return ret;
 }
@@ -606,11 +619,13 @@ static int process_connect_service(struct transport *transport,
 	struct strbuf cmdbuf = STRBUF_INIT;
 	int ret = 0;
 
+	warning("[process_connect_service]");
 	/*
 	 * Handle --upload-pack and friends. This is fire and forget...
 	 * just warn if it fails.
 	 */
 	if (strcmp(name, exec)) {
+		warning(".....");
 		int r = set_helper_option(transport, "servpath", exec);
 		if (r > 0)
 			warning(_("setting remote service path not supported by protocol"));
@@ -621,9 +636,11 @@ static int process_connect_service(struct transport *transport,
 	if (data->connect) {
 		strbuf_addf(&cmdbuf, "connect %s\n", name);
 		ret = run_connect(transport, &cmdbuf);
+		warning("data->connect, run run_connect.");
 	} else if (data->stateless_connect &&
 		   (get_protocol_version_config() == protocol_v2) &&
 		   !strcmp("git-upload-pack", name)) {
+		warning("data->statrless_connect,and is protocol v2, run run_connect.");
 		strbuf_addf(&cmdbuf, "stateless-connect %s\n", name);
 		ret = run_connect(transport, &cmdbuf);
 		if (ret)
@@ -631,6 +648,7 @@ static int process_connect_service(struct transport *transport,
 	}
 
 	strbuf_release(&cmdbuf);
+	warning("process_connect_service done.");
 	return ret;
 }
 
@@ -640,13 +658,13 @@ static int process_connect(struct transport *transport,
 	struct helper_data *data = transport->data;
 	const char *name;
 	const char *exec;
-
+	warning("[process_connect]");
 	name = for_push ? "git-receive-pack" : "git-upload-pack";
 	if (for_push)
 		exec = data->transport_options.receivepack;
 	else
 		exec = data->transport_options.uploadpack;
-
+	warning("name %s, exec %s", name, exec);
 	return process_connect_service(transport, name, exec);
 }
 
@@ -677,12 +695,15 @@ static int fetch(struct transport *transport,
 	struct helper_data *data = transport->data;
 	int i, count;
 
+	warning("[vtable->fetch]");
 	get_helper(transport);
 
 	if (process_connect(transport, 0)) {
+		warning("prcocess_connect for fetch done, do take_over.");
 		do_take_over(transport);
 		return transport->vtable->fetch(transport, nr_heads, to_fetch);
 	}
+	warning("[process_connect] done.");
 
 	if (!data->get_refs_list_called)
 		get_refs_list_using_list(transport, 0);
@@ -699,9 +720,11 @@ static int fetch(struct transport *transport,
 	    data->transport_options.check_self_contained_and_connected)
 		set_helper_option(transport, "check-connectivity", "true");
 
-	if (transport->cloning)
+	if (transport->cloning) {
+		warning("transport is for cloning, set_helper_option(transport, cloning, true)");
 		set_helper_option(transport, "cloning", "true");
-
+	}
+	
 	if (data->transport_options.update_shallow)
 		set_helper_option(transport, "update-shallow", "true");
 
@@ -714,8 +737,10 @@ static int fetch(struct transport *transport,
 	if (data->transport_options.negotiation_tips)
 		warning("Ignoring --negotiation-tip because the protocol does not support it.");
 
-	if (data->fetch)
+	if (data->fetch) {
+		warning("fetch_with_fetch.");
 		return fetch_with_fetch(transport, nr_heads, to_fetch);
+	}
 
 	if (data->import)
 		return fetch_with_import(transport, nr_heads, to_fetch);
@@ -1166,11 +1191,14 @@ static struct ref *get_refs_list(struct transport *transport, int for_push,
 {
 	get_helper(transport);
 
+	warning("[vtable->get_refs_list], for_push? :%d", for_push);
 	if (process_connect(transport, for_push)) {
+		warning("transport for push %d.", for_push);
 		do_take_over(transport);
 		return transport->vtable->get_refs_list(transport, for_push,
 							transport_options);
 	}
+	warning("[process_connect] done.");
 
 	return get_refs_list_using_list(transport, for_push);
 }
@@ -1178,6 +1206,7 @@ static struct ref *get_refs_list(struct transport *transport, int for_push,
 static struct ref *get_refs_list_using_list(struct transport *transport,
 					    int for_push)
 {
+	warning("[get_refs_list_using_list]");
 	struct helper_data *data = transport->data;
 	struct child_process *helper;
 	struct ref *ret = NULL;
@@ -1244,13 +1273,15 @@ static struct ref *get_refs_list_using_list(struct transport *transport,
 		fprintf(stderr, "Debug: Read ref listing.\n");
 	strbuf_release(&buf);
 
+	warning("read ref listing.");
 	for (posn = ret; posn; posn = posn->next)
 		resolve_remote_symref(posn, ret);
 
+	warning("get_refs_list_using_list done.");
 	return ret;
 }
 
-static struct transport_vtable vtable = {
+static struct transport_vtable helper_vtable = {
 	set_helper_option,
 	get_refs_list,
 	fetch,
@@ -1264,14 +1295,16 @@ int transport_helper_init(struct transport *transport, const char *name)
 	struct helper_data *data = xcalloc(1, sizeof(*data));
 	data->name = name;
 
+	warning("[transport_helper_init]");
 	transport_check_allowed(name);
 
 	if (getenv("GIT_TRANSPORT_HELPER_DEBUG"))
 		debug = 1;
 
 	transport->data = data;
-	transport->vtable = &vtable;
+	transport->vtable = &helper_vtable;
 	transport->smart_options = &(data->transport_options);
+	warning("[transport_helper_init] done.");
 	return 0;
 }
 

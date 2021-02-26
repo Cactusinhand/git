@@ -799,6 +799,7 @@ static int get_pack(struct fetch_pack_args *args,
 		    int only_packfile,
 		    struct ref **sought, int nr_sought)
 {
+	warning("call [get_pack], and this will call cmd_fetch_pack.");
 	struct async demux;
 	int do_keep = args->keep_pack;
 	const char *cmd_name;
@@ -956,6 +957,8 @@ static struct ref *do_fetch_pack(struct fetch_pack_args *args,
 				 struct shallow_info *si,
 				 struct string_list *pack_lockfiles)
 {
+	warning("call [do_fetch_pack].........................................");
+	warning("in [fetch_pack], args.remote_shallow: %d\n", args->remote_shallow);
 	struct repository *r = the_repository;
 	struct ref *ref = copy_ref_list(orig_ref);
 	struct object_id oid;
@@ -1074,9 +1077,14 @@ static struct ref *do_fetch_pack(struct fetch_pack_args *args,
 	if (args->deepen)
 		setup_alternate_shallow(&shallow_lock, &alternate_shallow_file,
 					NULL);
-	else if (si->nr_ours || si->nr_theirs)
+	/* remote is shallow */
+	else if (si->nr_ours || si->nr_theirs) {
+		if (args->remote_shallow)
+			die("source repository is shallow, reject to clone.11");
+		else
+			warning("remote source repository is shallow.11");
 		alternate_shallow_file = setup_temporary_shallow(si->shallow);
-	else
+	} else
 		alternate_shallow_file = NULL;
 	if (get_pack(args, fd, pack_lockfiles, 1, sought, nr_sought))
 		die(_("git fetch-pack: fetch failed."));
@@ -1188,6 +1196,7 @@ static int send_fetch_request(struct fetch_negotiator *negotiator, int fd_out,
 	const char *hash_name;
 	struct strbuf req_buf = STRBUF_INIT;
 
+	warning("[send_fetch_request]");
 	if (server_supports_v2("fetch", 1))
 		packet_buf_write(&req_buf, "command=fetch");
 	if (server_supports_v2("agent", 0))
@@ -1441,11 +1450,17 @@ static void receive_shallow_info(struct fetch_pack_args *args,
 		 * rejected (unless --update-shallow is set); do the same.
 		 */
 		prepare_shallow_info(si, shallows);
-		if (si->nr_ours || si->nr_theirs)
+		if (si->nr_ours || si->nr_theirs) {
+			if (args->remote_shallow)
+				die("sourece repository is shallow, reject to clone.2");
+			else
+				warning("remote source repository is shallow.2");
 			alternate_shallow_file =
 				setup_temporary_shallow(si->shallow);
-		else
+
+		} else
 			alternate_shallow_file = NULL;
+		
 	} else {
 		alternate_shallow_file = NULL;
 	}
@@ -1545,6 +1560,7 @@ static struct ref *do_fetch_pack_v2(struct fetch_pack_args *args,
 	while (state != FETCH_DONE) {
 		switch (state) {
 		case FETCH_CHECK_LOCAL:
+			warning("fetch_check_local case");
 			sort_ref_list(&ref, ref_compare_name);
 			QSORT(sought, nr_sought, cmp_ref_by_name);
 
@@ -1567,6 +1583,7 @@ static struct ref *do_fetch_pack_v2(struct fetch_pack_args *args,
 						  insert_one_alternate_object);
 			break;
 		case FETCH_SEND_REQUEST:
+			warning("fetch_send_request case");
 			if (!negotiation_started) {
 				negotiation_started = 1;
 				trace2_region_enter("fetch-pack",
@@ -1603,13 +1620,15 @@ static struct ref *do_fetch_pack_v2(struct fetch_pack_args *args,
 			}
 			break;
 		case FETCH_GET_PACK:
+			warning("fetch_get_pact case");
 			trace2_region_leave("fetch-pack",
 					    "negotiation_v2",
 					    the_repository);
 			/* Check for shallow-info section */
-			if (process_section_header(&reader, "shallow-info", 1))
+			if (process_section_header(&reader, "shallow-info", 1)) {
+				warning("ready to call receive_shallow_info");
 				receive_shallow_info(args, &reader, shallows, si);
-
+			}
 			if (process_section_header(&reader, "wanted-refs", 1))
 				receive_wanted_refs(&reader, sought, nr_sought);
 
@@ -1630,6 +1649,7 @@ static struct ref *do_fetch_pack_v2(struct fetch_pack_args *args,
 	}
 
 	for (i = 0; i < packfile_uris.nr; i++) {
+		warning("child process.");
 		struct child_process cmd = CHILD_PROCESS_INIT;
 		char packname[GIT_MAX_HEXSZ + 1];
 		const char *uri = packfile_uris.items[i].string +
@@ -1673,6 +1693,7 @@ static struct ref *do_fetch_pack_v2(struct fetch_pack_args *args,
 						 get_object_directory(),
 						 packname));
 	}
+	warning("done child process.");
 	string_list_clear(&packfile_uris, 0);
 
 	if (negotiator)
@@ -1878,10 +1899,11 @@ struct ref *fetch_pack(struct fetch_pack_args *args,
 		       struct string_list *pack_lockfiles,
 		       enum protocol_version version)
 {
+	warning("in [fetch_pack], args.remote_shallow: %d\n", args->remote_shallow);
 	struct ref *ref_cpy;
 	struct shallow_info si;
 	struct oid_array shallows_scratch = OID_ARRAY_INIT;
-
+  
 	fetch_pack_setup();
 	if (nr_sought)
 		nr_sought = remove_duplicates_in_refs(sought, nr_sought);
@@ -1894,11 +1916,13 @@ struct ref *fetch_pack(struct fetch_pack_args *args,
 		if (shallow->nr)
 			BUG("Protocol V2 does not provide shallows at this point in the fetch");
 		memset(&si, 0, sizeof(si));
+		warning("ready to call do_fetch_pack_v2");
 		ref_cpy = do_fetch_pack_v2(args, fd, ref, sought, nr_sought,
 					   &shallows_scratch, &si,
 					   pack_lockfiles);
 	} else {
 		prepare_shallow_info(&si, shallow);
+		warning("ready to call do_fetch_pack_v1");
 		ref_cpy = do_fetch_pack(args, fd, ref, sought, nr_sought,
 					&si, pack_lockfiles);
 	}

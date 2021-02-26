@@ -21,6 +21,7 @@
 int check_connected(oid_iterate_fn fn, void *cb_data,
 		    struct check_connected_options *opt)
 {
+	warning("[check_connected]");
 	struct child_process rev_list = CHILD_PROCESS_INIT;
 	FILE *rev_list_in;
 	struct check_connected_options defaults = CHECK_CONNECTED_INIT;
@@ -89,6 +90,7 @@ promisor_pack_found:
 
 no_promisor_pack_found:
 	if (opt->shallow_file) {
+		warning("opt->shallow_file");
 		strvec_push(&rev_list.args, "--shallow-file");
 		strvec_push(&rev_list.args, opt->shallow_file);
 	}

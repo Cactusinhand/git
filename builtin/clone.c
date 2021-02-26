@@ -971,7 +971,6 @@ static int path_exists(const char *path)
 int cmd_clone(int argc, const char **argv, const char *prefix)
 {
 	int is_bundle = 0, is_local;
-	int local_shallow = 0;
 	int reject_shallow = 0;
 	const char *repo_name, *repo, *work_tree, *git_dir;
 	char *path, *dir, *display_repo = NULL;
@@ -1167,16 +1166,6 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 	git_config(git_clone_config, NULL);
 
 	/*
-	 * If option_shallow is specified from CLI option,
-	 * ignore config_shallow from git_clone_config.
-	 */
-	if (config_shallow != -1) {
-		reject_shallow = config_shallow;
-	}
-	if (option_shallow != -1) {
-		reject_shallow = option_shallow;
-	}
-	/*
 	 * apply the remote name provided by --origin only after this second
 	 * call to git_config, to ensure it overrides all config-based values.
 	 */
@@ -1236,7 +1225,10 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 		if (filter_options.choice)
 			warning(_("--filter is ignored in local clones; use file:// instead."));
 		if (!access(mkpath("%s/shallow", path), F_OK)) {
-			local_shallow = 1;
+			if (reject_shallow)
+				die("remote repo is shallow, reject to clone.3");
+			else
+				warning("remote repo is shallow. 3");
 			if (option_local > 0)
 				warning(_("source repository is shallow, ignoring --local"));
 			is_local = 0;
@@ -1244,10 +1236,24 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 	}
 	if (option_local > 0 && !is_local)
 		warning(_("--local is ignored"));
+	/*
+	 * If option_shallow is specified from CLI option,
+	 * ignore config_shallow from git_clone_config.
+	 */
+	if (config_shallow != -1) {
+		reject_shallow = config_shallow;
+	}
+	if (option_shallow != -1) {
+		reject_shallow = option_shallow;
+	}
+
 	transport->cloning = 1;
 
+	warning("[builtin/clone.c]");
 	transport_set_option(transport, TRANS_OPT_KEEP, "yes");
 
+	if (reject_shallow)
+		transport_set_option(transport, TRANS_OPT_REJECT_SHALLOW, "1");
 	if (option_depth)
 		transport_set_option(transport, TRANS_OPT_DEPTH,
 				     option_depth);
@@ -1289,7 +1295,9 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 		strvec_push(&transport_ls_refs_options.ref_prefixes,
 			    "refs/tags/");
 
+	warning("builtin/clone.c: call [transport_get_remote_refs]..........");
 	refs = transport_get_remote_refs(transport, &transport_ls_refs_options);
+	warning("builtin/clone.c: call [transport_get_remote_refs] done.......");
 
 	if (refs) {
 		int hash_algo = hash_algo_by_ptr(transport_get_hash_algo(transport));
@@ -1319,7 +1327,9 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 			}
 
 		if (!is_local && !complete_refs_before_fetch) {
+			warning("builtin/clone.c: call [transport_fetch_refs]..........");
 			err = transport_fetch_refs(transport, mapped_refs);
+			warning("builtin/clone.c: call [transport_fetch_refs] done..........");
 			if (err)
 				goto cleanup;
 		}
@@ -1379,15 +1389,11 @@ int cmd_clone(int argc, const char **argv, const char *prefix)
 	if (is_local)
 		clone_local(path, git_dir);
 	else if (refs && complete_refs_before_fetch) {
+		warning("builtin/clone.c: call [transport_fetch_refs]..........");
 		err = transport_fetch_refs(transport, mapped_refs);
+		warning("builtin/clone.c: call [transport_fetch_refs] done..........");
 		if (err)
 			goto cleanup;
-	}
-
-	if (reject_shallow) {
-		if (local_shallow || is_repository_shallow(the_repository)) {
-			die(_("source repository is shallow, reject to clone."));
-		}
 	}
 
 	update_remote_refs(refs, mapped_refs, remote_head_points_at,

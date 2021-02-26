@@ -390,6 +390,7 @@ static void check_smart_http(struct discovery *d, const char *service,
 {
 	const char *p;
 	struct packet_reader reader;
+	warning("    remote-curl.c call [check_smart_http]");
 
 	/*
 	 * If we don't see x-$service-advertisement, then it's not smart-http.
@@ -542,6 +543,7 @@ static struct ref *get_refs(int for_push)
 {
 	struct discovery *heads;
 
+	warning("    remote-curl.c  call [get_refs]");
 	if (for_push)
 		heads = discover_refs("git-receive-pack", for_push);
 	else
@@ -1211,6 +1213,7 @@ static int fetch_git(struct discovery *heads,
 
 static int fetch(int nr_heads, struct ref **to_fetch)
 {
+	warning("    remote-curl.c call [fetch]");
 	struct discovery *d = discover_refs("git-upload-pack", 0);
 	if (d->proto_git)
 		return fetch_git(d, nr_heads, to_fetch);
@@ -1220,6 +1223,7 @@ static int fetch(int nr_heads, struct ref **to_fetch)
 
 static void parse_fetch(struct strbuf *buf)
 {
+	warning("    remote-curl.c  call [parse_fetch]");
 	struct ref **to_fetch = NULL;
 	struct ref *list_head = NULL;
 	struct ref **list = &list_head;
@@ -1403,6 +1407,7 @@ static int stateless_connect(const char *service_name)
 	 * client to fallback to using other transport helper functions to
 	 * complete their request.
 	 */
+	warning("    remote-curl.c call [stateless_connect]");
 	discover = discover_refs(service_name, 0);
 	if (discover->version != protocol_v2) {
 		printf("fallback\n");
@@ -1471,6 +1476,7 @@ static int stateless_connect(const char *service_name)
 
 int cmd_main(int argc, const char **argv)
 {
+	warning("    remote-curl.c  call [cmd_main]");
 	struct strbuf buf = STRBUF_INIT;
 	int nongit;
 
