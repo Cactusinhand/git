@@ -233,6 +233,7 @@ static struct discovery *last_discovery;
 
 static struct ref *parse_git_refs(struct discovery *heads, int for_push)
 {
+	warning("    remote-curl.c  call [parse_git_refs]");
 	struct ref *list = NULL;
 	struct packet_reader reader;
 
@@ -244,6 +245,7 @@ static struct ref *parse_git_refs(struct discovery *heads, int for_push)
 	heads->version = discover_version(&reader);
 	switch (heads->version) {
 	case protocol_v2:
+		warning("    case protocol_v0, protocol_v1");
 		/*
 		 * Do nothing.  This isn't a list of refs but rather a
 		 * capability advertisement.  Client would have run
@@ -253,6 +255,7 @@ static struct ref *parse_git_refs(struct discovery *heads, int for_push)
 		break;
 	case protocol_v1:
 	case protocol_v0:
+		warning("    case protocol_v0, protocol_v1");
 		get_remote_heads(&reader, &list, for_push ? REF_NORMAL : 0,
 				 NULL, &heads->shallow);
 		options.hash_algo = reader.hash_algo;
@@ -1213,7 +1216,7 @@ static int fetch_git(struct discovery *heads,
 
 static int fetch(int nr_heads, struct ref **to_fetch)
 {
-	warning("    remote-curl.c call [fetch]");
+	warning("    remote-curl.c  call [fetch]");
 	struct discovery *d = discover_refs("git-upload-pack", 0);
 	if (d->proto_git)
 		return fetch_git(d, nr_heads, to_fetch);

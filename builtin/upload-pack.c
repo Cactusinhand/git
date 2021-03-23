@@ -14,6 +14,7 @@ static const char * const upload_pack_usage[] = {
 
 int cmd_upload_pack(int argc, const char **argv, const char *prefix)
 {
+	warning("builtin/upload-pack.c    call cmd_upload_pack.");
 	const char *dir;
 	int strict = 0;
 	struct upload_pack_options opts = { 0 };

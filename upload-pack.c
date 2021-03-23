@@ -1330,6 +1330,7 @@ static int upload_pack_config(const char *var, const char *value, void *cb_data)
 
 void upload_pack(struct upload_pack_options *options)
 {
+	warning("upload-pack.c    call upload-pack");
 	struct packet_reader reader;
 	struct upload_pack_data data;
 
