@@ -42,7 +42,6 @@ static void add_sought_entry(struct ref ***sought, int *nr, int *alloc,
 
 int cmd_fetch_pack(int argc, const char **argv, const char *prefix)
 {
-	warning("call [builtin/fetch-pack], cmd_fetch_pack");
 	int i, ret;
 	struct ref *ref = NULL;
 	const char *dest = NULL;
@@ -64,7 +63,7 @@ int cmd_fetch_pack(int argc, const char **argv, const char *prefix)
 
 	memset(&args, 0, sizeof(args));
 	args.uploadpack = "git-upload-pack";
-	warning("builtin/fetch_pack.c: call [cmd_fetch_pack]" );
+	advise("builtin/fetch_pack.c: call [cmd_fetch_pack]" );
 	for (i = 1; i < argc && *argv[i] == '-'; i++) {
 		const char *arg = argv[i];
 
@@ -234,7 +233,7 @@ int cmd_fetch_pack(int argc, const char **argv, const char *prefix)
 		BUG("unknown protocol version");
 	}
 
-	warning("call [fetch_pack] in builtin/fetch-pack.c");
+	advise("builtin/fetch-pack.c:    call [fetch-pack]");
 	ref = fetch_pack(&args, fd, ref, sought, nr_sought,
 			 &shallow, pack_lockfiles_ptr, version);
 	if (pack_lockfiles.nr) {

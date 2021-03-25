@@ -402,7 +402,7 @@ static int fetch_refs_via_pack(struct transport *transport,
 		BUG("unknown protocol version");
 	else if (data->version <= protocol_v1)
 		die_if_server_options(transport);
-	warning("fetch_refs_via_pack, ready to call fetch_pack");
+	advise("transport.c::fetch_refs_via_pack:   call [fetch_pack]");
 	refs = fetch_pack(&args, data->fd,
 			  refs_tmp ? refs_tmp : transport->remote_refs,
 			  to_fetch, nr_heads, &data->shallow,

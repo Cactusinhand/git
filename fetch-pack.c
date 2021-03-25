@@ -799,7 +799,7 @@ static int get_pack(struct fetch_pack_args *args,
 		    int only_packfile,
 		    struct ref **sought, int nr_sought)
 {
-	warning("call [get_pack], and this will call cmd_fetch_pack.");
+	advise("fetch-pack.c    call [get_pack], and this will call cmd_fetch_pack?");
 	struct async demux;
 	int do_keep = args->keep_pack;
 	const char *cmd_name;
@@ -1082,7 +1082,7 @@ static struct ref *do_fetch_pack(struct fetch_pack_args *args,
 		if (args->remote_shallow)
 			die("source repository is shallow, reject to clone.11");
 		else
-			warning("remote source repository is shallow.11");
+			advise("remote source repository is shallow.11");
 		alternate_shallow_file = setup_temporary_shallow(si->shallow);
 	} else
 		alternate_shallow_file = NULL;
@@ -1454,7 +1454,7 @@ static void receive_shallow_info(struct fetch_pack_args *args,
 			if (args->remote_shallow)
 				die("sourece repository is shallow, reject to clone.2");
 			else
-				warning("remote source repository is shallow.2");
+				advise("remote source repository is shallow.2");
 			alternate_shallow_file =
 				setup_temporary_shallow(si->shallow);
 

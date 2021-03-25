@@ -233,7 +233,7 @@ static struct discovery *last_discovery;
 
 static struct ref *parse_git_refs(struct discovery *heads, int for_push)
 {
-	warning("    remote-curl.c  call [parse_git_refs]");
+	advise("    remote-curl.c  call [parse_git_refs]");
 	struct ref *list = NULL;
 	struct packet_reader reader;
 
@@ -546,7 +546,7 @@ static struct ref *get_refs(int for_push)
 {
 	struct discovery *heads;
 
-	warning("    remote-curl.c  call [get_refs]");
+	advise("    remote-curl.c  call [get_refs]");
 	if (for_push)
 		heads = discover_refs("git-receive-pack", for_push);
 	else
@@ -1160,6 +1160,7 @@ static int fetch_git(struct discovery *heads,
 	int i, err;
 	struct strvec args = STRVEC_INIT;
 	struct strbuf rpc_result = STRBUF_INIT;
+	advise("    remote-curl.c  call [fetch-git]");
 
 	strvec_pushl(&args, "fetch-pack", "--stateless-rpc",
 		     "--stdin", "--lock-pack", NULL);
@@ -1216,7 +1217,7 @@ static int fetch_git(struct discovery *heads,
 
 static int fetch(int nr_heads, struct ref **to_fetch)
 {
-	warning("    remote-curl.c  call [fetch]");
+	advise("    remote-curl.c  call [fetch]");
 	struct discovery *d = discover_refs("git-upload-pack", 0);
 	if (d->proto_git)
 		return fetch_git(d, nr_heads, to_fetch);
@@ -1226,7 +1227,7 @@ static int fetch(int nr_heads, struct ref **to_fetch)
 
 static void parse_fetch(struct strbuf *buf)
 {
-	warning("    remote-curl.c  call [parse_fetch]");
+	advise("    remote-curl.c  call [parse_fetch]");
 	struct ref **to_fetch = NULL;
 	struct ref *list_head = NULL;
 	struct ref **list = &list_head;
@@ -1479,7 +1480,7 @@ static int stateless_connect(const char *service_name)
 
 int cmd_main(int argc, const char **argv)
 {
-	warning("    remote-curl.c  call [cmd_main]");
+	advise("    remote-curl.c  call [cmd_main]");
 	struct strbuf buf = STRBUF_INIT;
 	int nongit;
 

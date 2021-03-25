@@ -121,7 +121,7 @@ static struct child_process *get_helper(struct transport *transport)
 	int duped;
 	int code;
 
-	warning("[get_helper]");
+	advise("[get_helper]");
 	if (data->helper)
 		return data->helper;
 
@@ -179,11 +179,10 @@ static struct child_process *get_helper(struct transport *transport)
 			mandatory = 1;
 		} else
 			capname = buf.buf;
-
+		advise("    got cap name.");
 		if (debug)
 			fprintf(stderr, "Debug: Got cap %s\n", capname);
 		if (!strcmp(capname, "fetch")) {
-			warning("[get_helper] cap name is fetch.");
 			data->fetch = 1;
 		}
 		else if (!strcmp(capname, "option"))
@@ -191,7 +190,6 @@ static struct child_process *get_helper(struct transport *transport)
 		else if (!strcmp(capname, "push"))
 			data->push = 1;
 		else if (!strcmp(capname, "import")) {
-			warning("[get_helper] cap name is import.");
 			data->import = 1;
 		}
 		else if (!strcmp(capname, "bidi-import"))
@@ -228,8 +226,8 @@ static struct child_process *get_helper(struct transport *transport)
 	strbuf_release(&buf);
 	if (debug)
 		fprintf(stderr, "Debug: Capabilities complete.\n");
-	warning("read Capabilities done.");
 	standard_options(transport);
+	advise("[get_helper] done.");
 	return data->helper;
 }
 
