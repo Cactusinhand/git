@@ -33,6 +33,7 @@ struct options {
 		check_self_contained_and_connected : 1,
 		cloning : 1,
 		update_shallow : 1,
+		remote_shallow : 1,
 		followtags : 1,
 		dry_run : 1,
 		thin : 1,
@@ -213,6 +214,9 @@ static int set_option(const char *name, const char *value)
 				die("unknown object format '%s'", value);
 			options.hash_algo = &hash_algos[algo];
 		}
+		return 0;
+	} else if (!strcmp(name, "reject-shallow")) {
+		options.remote_shallow = 1;
 		return 0;
 	} else {
 		return 1 /* unsupported */;
@@ -1176,6 +1180,8 @@ static int fetch_git(struct discovery *heads,
 		strvec_push(&args, "--cloning");
 	if (options.update_shallow)
 		strvec_push(&args, "--update-shallow");
+	if (options.remote_shallow)
+		strvec_push(&args, "--remote-shallow");
 	if (!options.progress)
 		strvec_push(&args, "--no-progress");
 	if (options.depth)

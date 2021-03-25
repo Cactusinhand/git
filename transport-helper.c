@@ -141,7 +141,7 @@ static struct child_process *get_helper(struct transport *transport)
 			     GIT_DIR_ENVIRONMENT, get_git_dir());
 
 	helper->trace2_child_class = helper->args.v[0]; /* "remote-<name>" */
-
+	warning("start_command");
 	code = start_command(helper);
 	if (code < 0 && errno == ENOENT)
 		die(_("unable to find remote helper for '%s'"), data->name);
@@ -164,7 +164,8 @@ static struct child_process *get_helper(struct transport *transport)
 	data->out = xfdopen(duped, "r");
 
 	write_constant(helper->in, "capabilities\n");
-	// data->transport_options.reject_shallow = transport->smart_options->reject_shallow; 
+	data->transport_options.reject_shallow = transport->smart_options->reject_shallow;
+	warning("start while-loop. and will run recvline()");
 	while (1) {
 		const char *capname, *arg;
 		int mandatory = 0;
@@ -411,10 +412,12 @@ static int fetch_with_fetch(struct transport *transport,
 	}
 
 	strbuf_addch(&buf, '\n');
+	advise("fetch_with_fetch: sendline");
 	sendline(data, &buf);
 	while (1) {
 		const char *name;
 
+		advise("fetch_with_fetch: recvline");
 		if (recvline(data, &buf))
 			exit(128);
 		if (skip_prefix(buf.buf, "lock ", &name)) {

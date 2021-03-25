@@ -799,7 +799,7 @@ static int get_pack(struct fetch_pack_args *args,
 		    int only_packfile,
 		    struct ref **sought, int nr_sought)
 {
-	advise("fetch-pack.c    call [get_pack], and this will call cmd_fetch_pack?");
+	advise("fetch-pack.c    call [get_pack], and use sideband");
 	struct async demux;
 	int do_keep = args->keep_pack;
 	const char *cmd_name;
@@ -1080,9 +1080,9 @@ static struct ref *do_fetch_pack(struct fetch_pack_args *args,
 	/* remote is shallow */
 	else if (si->nr_ours || si->nr_theirs) {
 		if (args->remote_shallow)
-			die("source repository is shallow, reject to clone.11");
+			die("source repository is shallow, reject to clone.");
 		else
-			advise("remote source repository is shallow.11");
+			advise("remote source repository is shallow.");
 		alternate_shallow_file = setup_temporary_shallow(si->shallow);
 	} else
 		alternate_shallow_file = NULL;
@@ -1196,7 +1196,7 @@ static int send_fetch_request(struct fetch_negotiator *negotiator, int fd_out,
 	const char *hash_name;
 	struct strbuf req_buf = STRBUF_INIT;
 
-	warning("[send_fetch_request]");
+	advise("[send_fetch_request]");
 	if (server_supports_v2("fetch", 1))
 		packet_buf_write(&req_buf, "command=fetch");
 	if (server_supports_v2("agent", 0))
@@ -1789,7 +1789,7 @@ static void update_shallow(struct fetch_pack_args *args,
 	struct oid_array ref = OID_ARRAY_INIT;
 	int *status;
 	int i;
-
+	advise("call update_shallow");
 	if (args->deepen && alternate_shallow_file) {
 		if (*alternate_shallow_file == '\0') { /* --unshallow */
 			unlink_or_warn(git_path_shallow(the_repository));
