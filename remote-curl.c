@@ -249,7 +249,7 @@ static struct ref *parse_git_refs(struct discovery *heads, int for_push)
 	heads->version = discover_version(&reader);
 	switch (heads->version) {
 	case protocol_v2:
-		warning("    case protocol_v0, protocol_v1");
+		warning("    case protocol_v2");
 		/*
 		 * Do nothing.  This isn't a list of refs but rather a
 		 * capability advertisement.  Client would have run
@@ -397,7 +397,7 @@ static void check_smart_http(struct discovery *d, const char *service,
 {
 	const char *p;
 	struct packet_reader reader;
-	warning("    remote-curl.c call [check_smart_http]");
+	advise("    remote-curl.c call [check_smart_http]");
 
 	/*
 	 * If we don't see x-$service-advertisement, then it's not smart-http.
@@ -416,6 +416,7 @@ static void check_smart_http(struct discovery *d, const char *service,
 		die(_("invalid server response; expected service, got flush packet"));
 
 	if (skip_prefix(reader.line, "# service=", &p) && !strcmp(p, service)) {
+		warning("case # service=");
 		/*
 		 * The header can include additional metadata lines, up
 		 * until a packet flush marker.  Ignore these now, but
@@ -436,7 +437,9 @@ static void check_smart_http(struct discovery *d, const char *service,
 		d->len = reader.src_len;
 		d->proto_git = 1;
 
+	//} else if (!strcmp(reader.line, "version 1") || !strcmp(reader.line, "version 2")) {
 	} else if (!strcmp(reader.line, "version 2")) {
+		warning("case version 2");
 		/*
 		 * v2 smart http; do not consume version packet, which will
 		 * be handled elsewhere.
