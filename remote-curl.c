@@ -237,7 +237,7 @@ static struct discovery *last_discovery;
 
 static struct ref *parse_git_refs(struct discovery *heads, int for_push)
 {
-	advise("    remote-curl.c  call [parse_git_refs]");
+	advise("    remote-curl.c    call [parse_git_refs]");
 	struct ref *list = NULL;
 	struct packet_reader reader;
 
