@@ -49,7 +49,7 @@ UI, Workflows & Features
    @{1}, but we failed to answer "what commit were we on?", i.e. @{1}
 
  * "git bundle" learns "--stdin" option to read its refs from the
-   standard input.  Also, it now does not lose refs whey they point
+   standard input.  Also, it now does not lose refs when they point
    at the same object.
 
  * "git log" learned a new "--diff-merges=<how>" option.
